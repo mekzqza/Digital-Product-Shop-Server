@@ -1,0 +1,35 @@
+# Backend + DB. The nginx / frontend services live alongside these on the VPS
+# and proxy /api → http://api:4000 (nginx must forward Host and X-Forwarded-Proto, and allow client_max_body_size 500m).
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://shop:${POSTGRES_PASSWORD}@db:5432/shop
+      UPLOAD_DIR: /data
+    volumes:
+      - uploads:/data
+    depends_on: [db]
+    restart: unless-stopped
+
+  web: # nginx: / → http://web:3000
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_STRIPE_PK: ${NEXT_PUBLIC_STRIPE_PK} # baked in at build time
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_DB: shop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
