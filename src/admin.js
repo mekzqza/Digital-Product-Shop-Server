@@ -141,7 +141,10 @@ admin.delete('/products/:id', async (req, res) => {
     `SELECT count(DISTINCT o.user_id)::int AS buyers FROM order_items oi JOIN orders o ON o.id = oi.order_id
      WHERE oi.product_id = $1`, [p.id]);
 
-  // TODO(human): board [11]-B — purchased products must not be deleted.
+  // [11]-B: deleting would break buyers' downloads — refuse and let the admin switch to DRAFT instead
+  if (buyers > 0) {
+    throw new HttpError(409, 'ลบไม่ได้ เพราะมีผู้ซื้อแล้ว — ให้เปลี่ยนเป็น DRAFT แทน', { buyers, suggest: 'DRAFT' });
+  }
 
   await q('DELETE FROM products WHERE id = $1', [p.id]);
   await Promise.all([
