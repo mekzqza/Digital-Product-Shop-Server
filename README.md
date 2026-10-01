@@ -41,15 +41,18 @@ curl http://localhost/api/health   # ผ่าน nginx → {"ok":true}
 
 ### nginx
 
+nginx เป็น container ของ project `lab-docker` บน VPS — compose นี้ต่อ `api`/`web` เข้า network `lab-docker_default`
+ด้วย alias `dps-api` / `dps-web` (ชื่อ `api` ชนกับ project อื่น)
+
 ```nginx
 location /api/ {
-  proxy_pass http://api:4000;
+  proxy_pass http://dps-api:4000;
   proxy_set_header Host $host;
   proxy_set_header X-Forwarded-Proto $scheme;
   client_max_body_size 500m;          # ไฟล์สินค้าใหญ่สุด 500 MB
 }
 location / {
-  proxy_pass http://web:3000;
+  proxy_pass http://dps-web:3000;
 }
 ```
 

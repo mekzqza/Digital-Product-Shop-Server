@@ -1,5 +1,5 @@
 # Backend + DB. The nginx / frontend services live alongside these on the VPS
-# and proxy /api → http://api:4000 (nginx must forward Host and X-Forwarded-Proto, and allow client_max_body_size 500m).
+# and proxy /api → http://dps-api:4000 (nginx must forward Host and X-Forwarded-Proto, and allow client_max_body_size 500m).
 services:
   api:
     build: .
@@ -10,13 +10,20 @@ services:
     volumes:
       - uploads:/data
     depends_on: [db]
+    networks:
+      default:
+      nginx:
+        aliases: [dps-api] # "api" clashes with other projects on the shared network
     restart: unless-stopped
 
-  web: # nginx: / → http://web:3000
+  web: # nginx: / → http://dps-web:3000
     build:
       context: ./web
       args:
         NEXT_PUBLIC_STRIPE_PK: ${NEXT_PUBLIC_STRIPE_PK} # baked in at build time
+    networks:
+      nginx:
+        aliases: [dps-web]
     restart: unless-stopped
 
   db:
@@ -29,6 +36,11 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     restart: unless-stopped
+
+networks:
+  nginx: # the VPS's existing nginx container (lab-docker project) lives here
+    name: lab-docker_default
+    external: true
 
 volumes:
   pgdata:
