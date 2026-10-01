@@ -44,16 +44,11 @@ curl http://localhost/api/health   # ผ่าน nginx → {"ok":true}
 nginx เป็น container ของ project `lab-docker` บน VPS — compose นี้ต่อ `api`/`web` เข้า network `lab-docker_default`
 ด้วย alias `dps-api` / `dps-web` (ชื่อ `api` ชนกับ project อื่น)
 
-```nginx
-location /api/ {
-  proxy_pass http://dps-api:4000;
-  proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-Proto $scheme;
-  client_max_body_size 500m;          # ไฟล์สินค้าใหญ่สุด 500 MB
-}
-location / {
-  proxy_pass http://dps-web:3000;
-}
+ต้องมี cert ที่ `/etc/letsencrypt/live/digital-product-shop.sukpat.dev/` ก่อน แล้ว:
+
+```bash
+cp nginx/digital-product-shop.sukpat.dev.conf ~/lab-docker/nginx/conf.d/
+docker exec lab-docker-nginx-1 nginx -t && docker exec lab-docker-nginx-1 nginx -s reload
 ```
 
 ### Stripe webhook
