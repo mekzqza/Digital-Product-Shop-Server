@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api, baht, when } from '../../../lib/api';
 import { Empty, Status } from '../../../components/ui';
 
+const REFRESH_MS = 10_000;
 const pct = (cur, prev) => (prev ? ((cur - prev) / prev) * 100 : null);
 function Delta({ cur, prev }) {
   const d = pct(cur, prev);
@@ -24,7 +25,12 @@ export default function Dashboard() {
     setError(false);
     api(`/admin/stats?days=${days}&bucket=${bucket}`).then(setS).catch(() => setError(true));
   }, [days, bucket]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+    // ponytail: polling, not WebSocket/SSE — numbers only move when a Stripe webhook lands. Upgrade if sub-second matters.
+    const t = setInterval(() => document.hidden || load(), REFRESH_MS);
+    return () => clearInterval(t);
+  }, [load]);
 
   const max = Math.max(1, ...(s?.series ?? []).map((p) => p.sales));
   const empty = s && s.products_published + s.products_draft === 0 && !s.recentOrders.length;
@@ -32,7 +38,7 @@ export default function Dashboard() {
   return (
     <div className="stack" style={{ gap: 20 }}>
       <div className="between">
-        <div><h1 className="h1">ภาพรวมร้าน</h1><span className="mut">อัปเดต {when(new Date())}</span></div>
+        <div><h1 className="h1">ภาพรวมร้าน</h1><span className="mut">อัปเดตล่าสุด {new Date().toLocaleTimeString('th-TH')} น. · รีเฟรชอัตโนมัติทุก {REFRESH_MS / 1000} วินาที</span></div>
         <select className="inp" style={{ width: 'auto' }} value={days} onChange={(e) => setDays(+e.target.value)}>
           <option value={7}>7 วันล่าสุด</option><option value={30}>30 วันล่าสุด</option><option value={90}>90 วันล่าสุด</option><option value={365}>1 ปี</option>
         </select>
@@ -75,6 +81,22 @@ export default function Dashboard() {
               {s?.series.map((p) => <i key={p.t} style={{ height: `${(p.sales / max) * 100}%` }} title={`${when(p.t, false)} · ${baht(p.sales)}`} />)}
             </div>
             {s?.series.length === 0 && <p className="mut">ยังไม่มียอดขายในช่วงนี้</p>}
+          </section>
+
+          <section className="card">
+            <div className="between pad"><h2 className="h2">สินค้าขายดี</h2><span className="mut">{days} วันล่าสุด · นับเฉพาะ PAID</span></div>
+            <table className="tbl">
+              <thead><tr><th>#</th><th>สินค้า</th><th>หมวดหมู่</th><th>ขายได้</th><th>รายได้</th></tr></thead>
+              <tbody>
+                {s?.topProducts?.map((p, i) => (
+                  <tr key={p.id} className="click" onClick={() => router.push(`/admin/products/${p.id}`)}>
+                    <td className="mono">{i + 1}</td><td>{p.name}</td><td><span className="tag">{p.category}</span></td>
+                    <td className="mono">{p.sold}</td><td className="mono">{baht(p.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {s?.topProducts?.length === 0 && <p className="mut pad">ยังไม่มียอดขายในช่วงนี้</p>}
           </section>
 
           <section className="card">

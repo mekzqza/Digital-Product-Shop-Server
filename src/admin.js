@@ -51,7 +51,29 @@ admin.get('/stats', async (req, res) => {
     `SELECT o.order_no, u.email, o.created_at, o.total, o.status,
        (SELECT count(*)::int FROM order_items WHERE order_id = o.id) AS item_count
      FROM orders o JOIN users u ON u.id = o.user_id ORDER BY o.created_at DESC LIMIT 5`);
-  res.json({ ...s, days, series: series.rows, recentOrders: recent.rows });
+  const top = await q(
+    `SELECT p.id, p.name, p.category, count(*)::int AS sold, sum(oi.price) AS revenue
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+     WHERE o.status = 'PAID' AND o.paid_at >= now() - make_interval(days => $1)
+     GROUP BY p.id ORDER BY sold DESC, revenue DESC LIMIT 5`, [days]);
+  res.json({ ...s, days, series: series.rows, recentOrders: recent.rows, topProducts: top.rows });
+});
+
+// ---------- users: /users?q=&role=&page= — read-only, roles are set in the DB (README: สร้างแอดมิน) ----------
+admin.get('/users', async (req, res) => {
+  const { q: term, role } = req.query;
+  const params = [], where = ['true'];
+  const add = (sql, v) => { params.push(v); where.push(sql.replaceAll('?', `$${params.length}`)); };
+  if (term) add('(u.email ILIKE ? OR u.name ILIKE ?)', `%${term}%`);
+  if (['customer', 'admin'].includes(role)) add('u.role = ?', role);
+  const { limit, offset, page: pg } = page(req, 20);
+  const { rows } = await q(
+    `SELECT u.id, u.email, u.name, u.role, u.created_at,
+       (SELECT count(*)::int FROM orders WHERE user_id = u.id AND status = 'PAID') AS paid_orders,
+       (SELECT coalesce(sum(total), 0) FROM orders WHERE user_id = u.id AND status = 'PAID') AS total_spent,
+       count(*) OVER ()::int AS total
+     FROM users u WHERE ${where.join(' AND ')} ORDER BY u.created_at DESC LIMIT ${limit} OFFSET ${offset}`, params);
+  res.json({ items: rows.map(({ total, ...r }) => r), total: rows[0]?.total ?? 0, page: pg });
 });
 
 // ---------- [11] product list: /products?q=&category=&status=&sort=&page= ----------

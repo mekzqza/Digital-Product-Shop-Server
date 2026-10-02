@@ -104,7 +104,8 @@ error ตอบเป็น `{ "error": "ข้อความ", ...extra }` · 
 | POST | `/library/:itemId/download` | user | ใช้สิทธิ์ 1 ครั้ง (สูงสุด 5) → signed URL อายุ 5 นาที |
 | GET | `/files/:itemId?exp&sig` | ลายเซ็น | ลิงก์ที่ได้จากข้อบน |
 | POST | `/stripe/webhook` | Stripe | |
-| GET | `/admin/stats?days&bucket` | admin | |
+| GET | `/admin/stats?days&bucket` | admin | มี `topProducts` (ขายดี 5 อันดับ) · หน้า dashboard ดึงซ้ำทุก 10 วินาที |
+| GET | `/admin/users?q&role&page` | admin | อ่านอย่างเดียว · มี `paid_orders`, `total_spent` |
 | GET · POST | `/admin/products` | admin | POST เป็น multipart: fields + `cover` (jpg/png) + `file` (zip/pdf/mp4) |
 | PATCH | `/admin/products` | admin | bulk `{ids,status}` |
 | GET · PUT · DELETE | `/admin/products/:id` | admin | ลบสินค้าที่มีคนซื้อแล้ว → 409 `{buyers}` |
