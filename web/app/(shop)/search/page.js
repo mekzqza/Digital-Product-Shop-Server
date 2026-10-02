@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, baht, CATS } from '../../../lib/api';
-import { Empty, ProductCard } from '../../../components/ui';
+import { Empty, ProductCard, SkeletonGrid } from '../../../components/ui';
 
 // [3] Search / category results — every filter lives in the query string (shareable, back button works)
 export default function Search() {
@@ -34,9 +34,10 @@ export default function Search() {
         </label>
       ))}
       <span className="lbl">ช่วงราคา</span>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <input className="inp" type="number" min="0" placeholder="฿0" defaultValue={f.min} onBlur={(e) => set({ min: e.target.value })} />
-        <input className="inp" type="number" min="0" placeholder="฿2,000" defaultValue={f.max} onBlur={(e) => set({ max: e.target.value })} />
+      {/* applied on blur; Enter blurs so the keyboard works too */}
+      <div className="row" style={{ flexWrap: 'nowrap' }} onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}>
+        <input className="inp" type="number" min="0" placeholder="฿0" aria-label="ราคาต่ำสุด" defaultValue={f.min} onBlur={(e) => set({ min: e.target.value })} />
+        <input className="inp" type="number" min="0" placeholder="฿2,000" aria-label="ราคาสูงสุด" defaultValue={f.max} onBlur={(e) => set({ max: e.target.value })} />
       </div>
       <span className="lbl">เรียงตาม</span>
       {[['newest', 'ใหม่สุด'], ['price_asc', 'ราคาต่ำ–สูง'], ['price_desc', 'ราคาสูง–ต่ำ']].map(([v, l]) => (
@@ -68,7 +69,7 @@ export default function Search() {
             {f.category && <button className="chip" onClick={() => set({ category: '' })}>{CATS[f.category]} ✕</button>}
             {(f.min || f.max) && <button className="chip" onClick={() => set({ min: '', max: '' })}>{baht(f.min || 0)}–{f.max ? baht(f.max) : '∞'} ✕</button>}
           </div>
-          {!res && <div className="grid g3">{[1, 2, 3].map((i) => <div key={i} className="pc"><div className="ph r43" /><div className="pcb"><div className="ph" style={{ height: 14 }} /></div></div>)}</div>}
+          {!res && <SkeletonGrid n={3} className="grid g3" />}
           {res?.items.length === 0 && (
             <div className="card">
               <Empty title="ไม่พบสินค้าที่ค้นหา" text="ลองใช้คำค้นที่สั้นลง ตรวจการสะกด หรือล้างตัวกรองราคาออก">

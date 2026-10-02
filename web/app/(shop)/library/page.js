@@ -59,7 +59,8 @@ export default function Library() {
                     <button className="btn" disabled={busy === x.item_id} onClick={() => download(x.item_id)}>
                       {busy === x.item_id ? 'กำลังเตรียมไฟล์…' : 'ดาวน์โหลด'}
                     </button>
-                    <span className="mut" style={{ fontSize: 11 }}>ไฟล์จะเปิดในเบราว์เซอร์ภายนอก</span>
+                    {/* only true inside the App Inventor WebViewer; browsers and the desktop app save the file directly */}
+                    {window.AppInventor && <span className="mut" style={{ fontSize: 11 }}>ไฟล์จะเปิดในเบราว์เซอร์ภายนอก</span>}
                     <span className="mut" style={{ fontSize: 11 }}>เหลือ {left}/{x.download_limit} ครั้ง · หมดอายุ {when(x.expires_at, false)}</span>
                   </>
                 ) : (

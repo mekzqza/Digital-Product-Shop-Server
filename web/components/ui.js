@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '../lib/store';
@@ -8,9 +9,9 @@ export const Logo = ({ href = '/' }) => (
   <Link href={href} className="lg"><span className="lgm">ล</span>โหลดเลย</Link>
 );
 
-export function Cover({ src, ratio = 'r43', label = 'COVER', className = '' }) {
+export function Cover({ src, ratio = 'r43', label = 'COVER', className = '', alt = '' }) {
   return src
-    ? <img src={src} alt="" className={`ph ${ratio} ${className}`} />
+    ? <img src={src} alt={alt} className={`ph ${ratio} ${className}`} />
     : <div className={`ph ${ratio} ${className}`}>{label}</div>;
 }
 
@@ -35,19 +36,27 @@ export const TestBanner = ({ text = 'ระบบทดสอบ Stripe — ไ�
 export function Header() {
   const { cartCount, user } = useStore();
   const router = useRouter();
+  const path = usePathname();
+  const here =(...hrefs) => (hrefs.some((h) => path.startsWith(h)) ? 'page' : undefined);
+  const badge = cartCount > 0 && <span className="cb">{cartCount}</span>;
   return (
     <header className="hdr">
       <Logo />
-      <form action="/search" className="hide-m" style={{ flex: 1, maxWidth: 520 }}>
-        <input className="srch" name="q" placeholder="ค้นหาสินค้าดิจิทัล เช่น เทมเพลต Excel" style={{ width: '100%', maxWidth: 'none' }} />
+      {/* client-side navigation: a plain GET form would reload the whole app.
+          No useSearchParams() here — it would opt every shop page's header out of the prerendered HTML. */}
+      <form action="/search" className="hide-m" style={{ flex: 1, maxWidth: 520 }}
+        onSubmit={(e) => { e.preventDefault(); router.push(`/search?q=${encodeURIComponent(new FormData(e.target).get('q'))}`); e.target.reset(); }}>
+        <input className="srch" name="q" aria-label="ค้นหาสินค้า"
+          placeholder="ค้นหาสินค้าดิจิทัล เช่น เทมเพลต Excel" style={{ width: '100%', maxWidth: 'none' }} />
       </form>
       <nav className="hact">
-        <Link href="/library">คลังของฉัน</Link>
-        <Link href="/cart">ตะกร้า <span className="cb">{cartCount}</span></Link>
-        <Link href={user ? '/account' : '/login'}>{user ? 'บัญชีของฉัน' : 'เข้าสู่ระบบ'}</Link>
+        {user?.role === 'admin' && <Link href="/admin">หลังร้าน</Link>}
+        <Link href="/library" aria-current={here('/library')}>คลังของฉัน</Link>
+        <Link href="/cart" aria-current={here('/cart')}>ตะกร้า {badge}</Link>
+        <Link href={user ? '/account' : '/login'} aria-current={here('/account', '/login', '/orders')}>{user ? 'บัญชีของฉัน' : 'เข้าสู่ระบบ'}</Link>
       </nav>
       <button className="only-m lnk" style={{ marginLeft: 'auto' }} onClick={() => router.push('/cart')}>
-        ตะกร้า <span className="cb">{cartCount}</span>
+        ตะกร้า {badge}
       </button>
     </header>
   );
@@ -73,24 +82,43 @@ export function Tabs({ disabled }) {
 
 export function ProductCard({ p, showDesc = true }) {
   const { addToCart, notify } = useStore();
+  const router = useRouter();
+  const [state, setState] = useState(''); // '' | 'busy' | 'added'
+  const toCart = { label: 'ดูตะกร้า', fn: () => router.push('/cart') };
   const add = async () => {
-    try { await addToCart(p.id); notify('เพิ่มลงตะกร้าแล้ว'); } catch (e) { notify(e.message); }
+    setState('busy');
+    try { await addToCart(p.id); setState('added'); notify('เพิ่มลงตะกร้าแล้ว', toCart); }
+    catch (e) { setState(''); notify(e.message, toCart); } // "already in cart" → the cart is the next stop either way
   };
   return (
     <div className="pc">
-      <Link href={`/products/${p.id}`}><Cover src={p.cover_url} label="COVER 4:3" /></Link>
+      <Link href={`/products/${p.id}`} tabIndex={-1}><Cover src={p.cover_url} label="COVER 4:3" alt={p.name} /></Link>
       <div className="pcb">
         <span className="tag">{p.category}</span>
         <Link href={`/products/${p.id}`} className="pt">{p.name}</Link>
         {showDesc && p.excerpt && <p className="pd">{p.excerpt}</p>}
         <div className="prow">
           <span className="pp">{baht(p.price)}</span>
-          <button className="btn" onClick={add}>เพิ่มลงตะกร้า</button>
+          {state === 'added'
+            ? <Link className="btn2" href="/cart">✓ ดูในตะกร้า</Link>
+            : <button className="btn" disabled={state === 'busy'} onClick={add}>เพิ่มลงตะกร้า</button>}
         </div>
       </div>
     </div>
   );
 }
+
+// Loading placeholder shaped like the product grid, shared by [2] and [3]
+export const SkeletonGrid = ({ n = 8, className = 'grid' }) => (
+  <div className={`${className} sk`} aria-hidden="true">
+    {Array.from({ length: n }, (_, i) => (
+      <div key={i} className="pc">
+        <div className="ph r43" />
+        <div className="pcb"><div className="ph" style={{ height: 14 }} /><div className="ph" style={{ height: 14, width: '60%' }} /></div>
+      </div>
+    ))}
+  </div>
+);
 
 export const CategoryChips = ({ active }) => (
   <div className="chips">
@@ -113,6 +141,11 @@ export function SignedOut({ title, text, next }) {
 }
 
 export function Modal({ children, onClose }) {
+  useEffect(() => {
+    const h = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>{children}</div>
