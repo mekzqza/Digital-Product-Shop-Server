@@ -86,8 +86,12 @@ function PayForm({ user, items, ids }) {
         <section className="card pad stack">
           <div className="between"><h2 className="h2">ข้อมูลบัตรเครดิต/เดบิต</h2><span className="mut mono" style={{ fontSize: 10 }}>POWERED BY STRIPE</span></div>
           <div className={`inp ${error ? 'bad' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
-            <CardElement options={{ hidePostalCode: true, style: { base: { fontSize: '15px', fontFamily: 'system-ui' } } }}
-              onChange={(e) => setCardDone(e.complete)} style={{ width: '100%' }} />
+            {/* CardElement ignores a style prop, and its iframe is width:1px;min-width:100% — as a bare flex item
+                it collapses to 1px and can't be clicked. The wrapper gives it a real width. */}
+            <div style={{ width: '100%' }}>
+              <CardElement options={{ hidePostalCode: true, style: { base: { fontSize: '15px', fontFamily: 'system-ui' } } }}
+                onChange={(e) => setCardDone(e.complete)} />
+            </div>
           </div>
           {error && <div className="err">{error} — ข้อมูลในฟอร์มยังอยู่ ลองบัตรอื่นได้เลย</div>}
           <div className="test" style={{ fontSize: 12 }}>
