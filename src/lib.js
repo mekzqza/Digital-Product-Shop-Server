@@ -77,6 +77,43 @@ export function verifyDownload(itemId, exp, sig, now = Date.now()) {
   return typeof sig === 'string' && sig.length === good.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good));
 }
 
+// ---- CSV (stdlib only; Excel opens it directly) ----
+// Excel runs a cell starting with = + - @ as a formula, and names are typed by customers: guard strings with a
+// leading ' (numbers stay numbers so -5 is still a number). parseCsv strips the guard again on import.
+const FORMULA = '[=+\\-@\\t\\r]';
+function csvCell(v) {
+  let s = String(v ?? '');
+  if (typeof v === 'string' && new RegExp('^' + FORMULA).test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+}
+// BOM so Excel reads Thai as UTF-8, CRLF per RFC 4180. cols come from pg `fields` so an empty table still gets a header.
+export const toCsv = (rows, cols) => '\uFEFF' + [cols, ...rows.map((r) => cols.map((c) => r[c]))]
+  .map((r) => r.map((v) => csvCell(v instanceof Date ? v.toISOString() : v)).join(',')).join('\r\n');
+
+// First row is the header → array of { header: cell }. Handles quotes, "" escapes, newlines inside quotes, CRLF, BOM.
+export function parseCsv(text) {
+  const s = text.replace(/^\uFEFF/, ''), rows = [[]];
+  let cell = '', quoted = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quoted) {
+      if (c === '"' && s[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { rows.at(-1).push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && s[i + 1] === '\n') i++;
+      rows.at(-1).push(cell); cell = ''; rows.push([]);
+    } else cell += c;
+  }
+  rows.at(-1).push(cell);
+  const [head, ...body] = rows;
+  const unguard = new RegExp(`^'(?=${FORMULA})`);
+  return body.filter((r) => r.some((x) => x !== ''))
+    .map((r) => Object.fromEntries(head.map((h, i) => [h.trim(), (r[i] ?? '').replace(unguard, '')])));
+}
+
 export const page = (req, size = 20) => {
   const p = Math.max(1, parseInt(req.query.page) || 1);
   return { limit: size, offset: (p - 1) * size, page: p };

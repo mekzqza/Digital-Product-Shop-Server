@@ -110,6 +110,8 @@ error ตอบเป็น `{ "error": "ข้อความ", ...extra }` · 
 | GET · PUT · DELETE | `/admin/products/:id` | admin | ลบสินค้าที่มีคนซื้อแล้ว → 409 `{buyers}` |
 | GET | `/admin/orders?q&status&from&to&page` · `/admin/orders/:orderNo` | admin | |
 | POST | `/admin/orders/:orderNo/refund` | admin | เฉพาะ PAID → REFUNDED (ตัดสิทธิ์ดาวน์โหลด) |
+| GET | `/admin/export/:what?format=csv\|json` | admin | what: `products` `users` `orders` · CSV มี BOM เปิดใน Excel ได้ |
+| POST | `/admin/import/products` | admin | body = เนื้อไฟล์ CSV (`text/plain`) หรือ JSON array · ไม่มี `id` = เพิ่มเป็น DRAFT, มี `id` = แก้ไข · ผิดแถวเดียวไม่บันทึกทั้งไฟล์ (422 `rows`) |
 
 ## แอปมือถือ (App Inventor)
 
@@ -119,4 +121,4 @@ error ตอบเป็น `{ "error": "ข้อความ", ...extra }` · 
 
 ## ยังไม่ได้ทำ
 
-ลืมรหัสผ่าน · Google OAuth · โค้ดส่วนลด · ส่งออก CSV · ส่งใบเสร็จซ้ำ / ใบเสร็จ PDF · แกลเลอรีภาพตัวอย่าง · ตัวเล่นคอร์ส · rich text editor (ตอนนี้ใช้ textarea + Markdown)
+ลืมรหัสผ่าน · Google OAuth · โค้ดส่วนลด · ส่งใบเสร็จซ้ำ / ใบเสร็จ PDF · แกลเลอรีภาพตัวอย่าง · ตัวเล่นคอร์ส · rich text editor (ตอนนี้ใช้ textarea + Markdown)

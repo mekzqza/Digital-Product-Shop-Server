@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Router } from 'express';
+import express, { Router } from 'express';
 import multer from 'multer';
-import { q, HttpError, CATEGORIES, UPLOAD_DIR, requireAdmin, audit, page } from './lib.js';
+import { q, HttpError, CATEGORIES, UPLOAD_DIR, requireAdmin, audit, page, toCsv, parseCsv } from './lib.js';
 import { stripe, CARD } from './shop.js';
 
 const upload = multer({
@@ -199,4 +199,79 @@ admin.post('/orders/:orderNo/refund', async (req, res) => {
   await q(`UPDATE orders SET status = 'REFUNDED' WHERE id = $1`, [o.id]); // revokes library access
   await audit(req.user.id, 'order_refund', req, req.params.orderNo);
   res.json({ status: 'REFUNDED' });
+});
+
+// ---------- import / export: CSV (opens in Excel) or JSON ----------
+// /export/products|users|orders?format=csv|json
+const EXPORTS = {
+  products: `SELECT id, name, category, price, compare_at, description, file_types, version, status, created_at, updated_at
+             FROM products ORDER BY id`,
+  users: `SELECT u.id, u.email, u.name, u.role, u.created_at,
+            count(o.id)::int AS paid_orders, coalesce(sum(o.total), 0) AS total_spent
+          FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.status = 'PAID' GROUP BY u.id ORDER BY u.id`,
+  orders: `SELECT o.order_no, u.email, o.status, o.total, o.created_at, o.paid_at,
+             (SELECT string_agg(p.name, ' | ' ORDER BY oi.id) FROM order_items oi JOIN products p ON p.id = oi.product_id
+              WHERE oi.order_id = o.id) AS items
+           FROM orders o JOIN users u ON u.id = o.user_id ORDER BY o.created_at DESC`,
+};
+
+admin.get('/export/:what', async (req, res) => {
+  const { what } = req.params;
+  if (!Object.hasOwn(EXPORTS, what)) throw new HttpError(404, 'not found');
+  const ext = req.query.format === 'json' ? 'json' : 'csv';
+  // ponytail: whole table in memory — stream with pg-cursor if a table outgrows ~100k rows
+  const { rows, fields } = await q(EXPORTS[what]);
+  await audit(req.user.id, 'export', req, `${what}.${ext}`); // the users export is personal data
+  res.attachment(`${what}-${new Date().toISOString().slice(0, 10)}.${ext}`);
+  res.send(ext === 'json' ? JSON.stringify(rows, null, 2) : toCsv(rows, fields.map((f) => f.name)));
+});
+
+const IMPORT_COLS = ['name', 'category', 'price', 'compare_at', 'description', 'file_types', 'version'];
+
+// Body is the file's text: CSV with a header row, or a JSON array — same columns as the products export.
+// Row without id → new DRAFT (cover/file are uploaded later in [12]); row with id → overwrite the text columns.
+// All-or-nothing: every row is validated first, then a single statement writes them.
+admin.post('/import/products', express.text({ type: 'text/*', limit: '5mb' }), async (req, res) => {
+  let rows = req.body; // already an array when the client sent application/json
+  if (typeof rows === 'string') {
+    const text = rows.replace(/^\uFEFF/, '').trim();
+    try { rows = text.startsWith('[') ? JSON.parse(text) : parseCsv(text); } catch { rows = null; }
+  }
+  if (!Array.isArray(rows) || !rows.length) throw new HttpError(400, 'อ่านไฟล์ไม่ได้ — ต้องเป็น CSV ที่มีแถวหัวตาราง หรือ JSON array');
+  rows = rows.map((r) => (r && typeof r === 'object' ? r : {}));
+
+  const idOf = (r) => (r.id == null || r.id === '' ? null : Number(r.id));
+  const { rows: found } = await q('SELECT id FROM products WHERE id = ANY($1)', [rows.map(idOf).filter(Number.isSafeInteger)]);
+  const known = new Set(found.map((p) => Number(p.id)));
+
+  const errors = [];
+  rows.forEach((r, i) => {
+    const id = idOf(r);
+    let e;
+    if (id != null && !known.has(id)) e = { id: `ไม่พบสินค้า id ${r.id}` };
+    // an update overwrites every column, so a file missing one would silently blank it
+    else if (id != null && IMPORT_COLS.some((c) => !(c in r))) e = { id: `แถวที่มี id ต้องมีครบทุกคอลัมน์: ${IMPORT_COLS.join(', ')}` };
+    else try { validate({ ...r, status: null }, {}); } catch (err) { e = err.extra.errors; }
+    if (e) errors.push({ row: i + 1, name: r.name, errors: e });
+  });
+  if (errors.length) {
+    throw new HttpError(422, `นำเข้าไม่สำเร็จ — มี ${errors.length} แถวที่ต้องแก้ ยังไม่มีการบันทึกข้อมูล`, { rows: errors.slice(0, 50) });
+  }
+
+  const clean = rows.map((r) => ({
+    id: idOf(r), name: String(r.name).trim(), category: r.category, price: Number(r.price),
+    compare_at: Number(r.compare_at) || null, description: String(r.description ?? ''),
+    file_types: r.file_types || null, version: r.version || null,
+  }));
+  const { rows: [n] } = await q(
+    `WITH r AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(id bigint, name text, category text, price numeric,
+                  compare_at numeric, description text, file_types text, version text)),
+          u AS (UPDATE products p SET name = r.name, category = r.category, price = r.price, compare_at = r.compare_at,
+                  description = r.description, file_types = r.file_types, version = r.version, updated_at = now()
+                FROM r WHERE p.id = r.id RETURNING p.id),
+          i AS (INSERT INTO products (name, category, price, compare_at, description, file_types, version)
+                SELECT name, category, price, compare_at, description, file_types, version FROM r WHERE id IS NULL RETURNING id)
+     SELECT (SELECT count(*)::int FROM i) AS created, (SELECT count(*)::int FROM u) AS updated`, [JSON.stringify(clean)]);
+  await audit(req.user.id, 'product_import', req, `created ${n.created}, updated ${n.updated}`);
+  res.json(n);
 });

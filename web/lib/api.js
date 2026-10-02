@@ -15,14 +15,24 @@ export const store = {
 
 export async function api(path, { method = 'GET', body } = {}) {
   const token = store.get('token');
+  const raw = typeof body === 'string'; // file text for /admin/import
   const res = await fetch('/api' + path, {
     method,
-    headers: { ...(token && { Authorization: `Bearer ${token}` }), ...(body && { 'Content-Type': 'application/json' }) },
-    body: body && JSON.stringify(body),
+    headers: { ...(token && { Authorization: `Bearer ${token}` }), ...(body && { 'Content-Type': raw ? 'text/plain' : 'application/json' }) },
+    body: raw ? body : body && JSON.stringify(body),
   });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw Object.assign(new Error(data?.error || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง'), { status: res.status, data });
   return data;
+}
+
+// Exports need the Bearer header, so a plain <a href> can't fetch them: fetch → blob → click.
+export async function downloadFile(path, filename) {
+  const res = await fetch('/api' + path, { headers: { Authorization: `Bearer ${store.get('token')}` } });
+  if (!res.ok) throw new Error('ส่งออกไม่สำเร็จ ลองใหม่อีกครั้ง');
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await res.blob()), download: filename });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000); // some browsers cancel the download if revoked at once
 }
 
 // Multipart upload with progress (fetch can't report upload progress). Returns { promise, abort }.

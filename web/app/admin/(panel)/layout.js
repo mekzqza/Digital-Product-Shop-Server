@@ -41,6 +41,7 @@ export default function AdminLayout({ children }) {
           {item('/admin', 'Dashboard')}
           {item('/admin/products', 'สินค้า', badges.products)}
           {item('/admin/orders', 'คำสั่งซื้อ', badges.orders)}
+          {item('/admin/data', 'นำเข้า / ส่งออก')}
           <div style={{ marginTop: 'auto', padding: '16px 20px', borderTop: '1px solid #2e3139' }}>
             <div style={{ fontSize: 13 }}>{user.name}</div>
             <div style={{ fontSize: 11, color: '#a9aeb8' }}>{user.email}</div>
