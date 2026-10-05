@@ -13,7 +13,7 @@ export default function Account() {
   const [busy, setBusy] = useState(false);
   // shown signed out too: the link is often opened on another device than the one that registered
   const notice = verified === '1' ? <div className="alert ok">ยืนยันอีเมลเรียบร้อยแล้ว</div>
-    : verified === '0' ? <div className="alert">! ลิงก์ยืนยันไม่ถูกต้องหรือหมดอายุ — เข้าสู่ระบบแล้วกด “ส่งลิงก์ยืนยันอีกครั้ง”</div>
+    : verified === '0' ? <div className="alert">! ลิงก์ยืนยันไม่ถูกต้องหรือหมดอายุ — ลองเข้าสู่ระบบ แล้วกด “ส่งลิงก์ยืนยันอีกครั้ง” ที่ขึ้นมา</div>
     : null;
 
   if (user === null) return (
@@ -26,7 +26,7 @@ export default function Account() {
 
   const resend = () => {
     setBusy(true);
-    api('/auth/verify/send', { method: 'POST' })
+    api('/auth/verify/send', { method: 'POST', body: { email: user.email } })
       .then(() => notify(`ส่งลิงก์ยืนยันไปที่ ${user.email} แล้ว`), (e) => notify(e.message))
       .finally(() => setBusy(false));
   };

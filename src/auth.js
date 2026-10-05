@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   q, HttpError, hashPassword, checkPassword, createSession, deleteSession, requireAuth, audit,
-  sendMail, signLink, verifyLink,
+  sendMail, signLink, verifyLink, USABLE,
 } from './lib.js';
 
 const MAX_FAILS = 5;
@@ -31,7 +31,7 @@ async function login(req, { adminOnly }) {
   const { password, remember } = req.body ?? {};
   if (!email || !password) throw new HttpError(400, 'กรุณากรอกอีเมลและรหัสผ่าน');
 
-  const u = (await q('SELECT * FROM users WHERE email = $1', [email])).rows[0];
+  const u = (await q(`SELECT u.*, ${USABLE} AS usable FROM users u WHERE u.email = $1`, [email])).rows[0];
   if (u?.locked_until > new Date()) {
     await audit(u.id, 'login_locked', req);
     throw new HttpError(423, 'บัญชีถูกล็อกชั่วคราว', { lockedUntil: u.locked_until });
@@ -50,6 +50,11 @@ async function login(req, { adminOnly }) {
     throw new HttpError(401, 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', { attemptsLeft });
   }
   await q('UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = $1', [u.id]);
+  // Only after the password matched: a stranger must not learn which addresses are registered but unverified.
+  if (!u.usable) {
+    await audit(u.id, 'login_unverified', req);
+    throw new HttpError(403, 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ โดยกดลิงก์ในอีเมลที่เราส่งให้', { code: 'email_unverified' });
+  }
   if (adminOnly && u.role !== 'admin') {
     await audit(u.id, 'admin_login_forbidden', req);
     throw new HttpError(403, 'บัญชีนี้ไม่มีสิทธิ์เข้าถึงระบบหลังร้าน');
@@ -74,14 +79,16 @@ export const auth = Router()
       [email.trim().toLowerCase(), name.trim(), await hashPassword(password)]);
     if (!rows[0]) throw new HttpError(409, 'อีเมลนี้ถูกใช้แล้ว', { errors: { email: 'อีเมลนี้ถูกใช้แล้ว' } });
     sendVerify(req, rows[0]); // not awaited: signing up must not wait on (or fail with) SMTP
-    res.status(201).json({ token: await createSession(rows[0].id, 1), user: { ...rows[0], email_verified: false } });
+    // No token: the account can't sign in until the emailed link is opened (login answers 403 email_unverified).
+    res.status(201).json({ user: { ...rows[0], email_verified: false }, verifyRequired: true });
   })
 
-  // ---- email verification. Unverified accounts are not blocked from anything: the account page nags instead. ----
-  .post('/verify/send', requireAuth, async (req, res) => {
-    if (req.user.email_verified) throw new HttpError(409, 'อีเมลนี้ยืนยันแล้ว');
-    if (!(await claimMail(req.user.id))) throw new HttpError(429, 'เพิ่งส่งอีเมลไป กรุณารอ 1 นาทีแล้วลองใหม่');
-    sendVerify(req, req.user);
+  // ---- email verification. An unverified account can't sign in (USABLE in lib.js), so this takes no Bearer. ----
+  // Always 204, like /forgot: the answer must not reveal whether the address has an account waiting.
+  .post('/verify/send', async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    const { rows: [u] } = await q('SELECT id, email FROM users WHERE email = $1 AND email_verified_at IS NULL', [email]);
+    if (u && await claimMail(u.id)) sendVerify(req, u);
     res.status(204).end();
   })
   // The emailed link lands here (a browser GET, so no Bearer) and bounces to the web page with the outcome.

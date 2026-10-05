@@ -38,7 +38,7 @@ curl http://localhost/api/health   # ผ่าน nginx → {"ok":true}
 | `STRIPE_SECRET_KEY` | `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` จากหน้า webhook ของ Stripe |
 | `NEXT_PUBLIC_STRIPE_PK` | `pk_test_…` — ฝังตอน build หน้าเว็บ เปลี่ยนแล้วต้อง `docker compose build web` |
-| `GMAIL_USER` | Gmail ที่ใช้ส่งใบเสร็จ ลิงก์ยืนยันอีเมล และลิงก์ตั้งรหัสผ่านใหม่ (เว้นว่าง = ไม่ส่งเมล) |
+| `GMAIL_USER` | Gmail ที่ใช้ส่งใบเสร็จ ลิงก์ยืนยันอีเมล และลิงก์ตั้งรหัสผ่านใหม่ (เว้นว่าง = ไม่ส่งเมล และสมาชิกใหม่จะยืนยันอีเมลไม่ได้ จึงเข้าสู่ระบบไม่ได้) |
 | `GMAIL_APP_PASSWORD` | App Password 16 ตัวจาก <https://myaccount.google.com/apppasswords> — ต้องเปิด 2-Step Verification ก่อน ไม่ใช่รหัสผ่านบัญชี |
 
 ### nginx
@@ -93,11 +93,11 @@ error ตอบเป็น `{ "error": "ข้อความ", ...extra }` · 
 
 | Method | Path | Auth | หมายเหตุ |
 |---|---|---|---|
-| POST | `/auth/register` | – | `{name,email,password}` → `{token,user}` |
-| POST | `/auth/login` | – | `{email,password,remember}` · ผิด 5 ครั้งล็อก 15 นาที (423) |
+| POST | `/auth/register` | – | `{name,email,password}` → `{user,verifyRequired}` · ไม่มี token: ต้องกดลิงก์ยืนยันในอีเมลก่อนจึงเข้าสู่ระบบได้ |
+| POST | `/auth/login` | – | `{email,password,remember}` → `{token,user}` · ผิด 5 ครั้งล็อก 15 นาที (423) · ยังไม่ยืนยันอีเมล → 403 `{code:"email_unverified"}` (แอดมินได้รับยกเว้น) |
 | POST | `/auth/admin/login` | – | รหัสถูกแต่ไม่ใช่แอดมิน → 403 |
 | POST | `/auth/logout` · GET `/auth/me` | user | `me` คืน `cartCount` ด้วย · `user.email_verified` บอกว่ายืนยันอีเมลแล้วหรือยัง |
-| POST | `/auth/verify/send` | user | ส่งลิงก์ยืนยันอีเมลอีกครั้ง · 1 ฉบับ/นาที (429) · สมัครสมาชิกส่งให้อัตโนมัติ |
+| POST | `/auth/verify/send` | – | `{email}` ส่งลิงก์ยืนยันอีกครั้ง · ตอบ 204 เสมอ (ไม่บอกว่ามีบัญชีหรือไม่) · 1 ฉบับ/นาที · สมัครสมาชิกส่งให้อัตโนมัติ |
 | GET | `/auth/verify?u&exp&sig` | ลายเซ็น | ลิงก์ในอีเมล (อายุ 24 ชม.) → redirect ไป `/account?verified=1\|0` |
 | POST | `/auth/forgot` | – | `{email}` → 204 เสมอ (ไม่บอกว่ามีบัญชีหรือไม่) · ส่งลิงก์ `/reset?u&exp&sig` อายุ 1 ชม. |
 | POST | `/auth/reset` | ลายเซ็น | `{u,exp,sig,password}` · ลิงก์ใช้ได้ครั้งเดียว · ออกจากระบบทุกอุปกรณ์ |

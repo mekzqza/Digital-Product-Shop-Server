@@ -37,13 +37,19 @@ export const deleteSession = (token) => q('DELETE FROM sessions WHERE token_hash
 
 const bearer = (req) => req.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
 
+// An account works only once its address is proven (SQL, for any query that aliases users as u).
+// Admins are exempt: they are promoted by hand in the DB (README), never by signing up, and locking
+// the owner out of /admin over a missing click would be worse than what the rule protects.
+export const USABLE = `(u.email_verified_at IS NOT NULL OR u.role = 'admin')`;
+
 async function loadUser(req) {
   const token = bearer(req);
   if (!token) return null;
+  // USABLE here too: sessions opened before verification was enforced must stop working, not live out their 30 days
   const { rows } = await q(
     `SELECT u.id, u.email, u.name, u.role, u.created_at, u.email_verified_at IS NOT NULL AS email_verified
      FROM sessions s JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha(token)]);
+     WHERE s.token_hash = $1 AND s.expires_at > now() AND ${USABLE}`, [sha(token)]);
   return rows[0] || null;
 }
 
@@ -90,6 +96,7 @@ export const verifyLink = (kind, u, exp, sig) => verifyDownload(linkKey(kind, u)
 const mailer = process.env.GMAIL_USER ? nodemailer.createTransport({
   service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
 }) : null;
+if (!mailer) console.warn('GMAIL_USER is not set: no mail is sent, so new accounts can never verify their email and sign in');
 // Never rejects: callers don't await it, and a mail failure must not undo a paid order. No GMAIL_USER = no-op.
 // ponytail: one try, failures only logged, Gmail caps ~500 mails/day. Add orders.receipt_sent_at + a resend
 // endpoint (or a real mail provider) when a lost receipt starts to matter.
