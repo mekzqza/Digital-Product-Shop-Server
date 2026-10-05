@@ -44,7 +44,7 @@ export default function Product() {
         <div className="stack">
           <span className="tag">{p.category}</span>
           <h1 className="h1">{p.name}</h1>
-          <span className="mut">โดย ร้านโหลดเลย · ขายแล้ว {p.sold.toLocaleString('th-TH')} ครั้ง · อัปเดต {when(p.updated_at, false)}</span>
+          <span className="mut">โดย ร้านสินค้าดิจิทัล · ขายแล้ว {p.sold.toLocaleString('th-TH')} ครั้ง · อัปเดต {when(p.updated_at, false)}</span>
           <div className="row">
             <span className="pp" style={{ fontSize: 26 }}>{baht(p.price)}</span>
             {off > 0 && <><s className="mut mono">{baht(p.compare_at)}</s><span className="st st-FAILED">ลด {off}%</span></>}

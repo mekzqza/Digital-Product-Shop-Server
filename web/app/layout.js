@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { StoreProvider } from '../lib/store';
 import './globals.css';
 
-export const metadata = { title: 'โหลดเลย — ร้านสินค้าดิจิทัล' };
+export const metadata = { title: 'ร้านสินค้าดิจิทัล' };
 
 export default function RootLayout({ children }) {
   return (
