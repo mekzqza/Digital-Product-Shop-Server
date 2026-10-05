@@ -106,8 +106,19 @@ export const sendMail = (to, subject, text) => mailer
 
 // Plain-text receipt body. o = { order_no, total, paid_at: Date, items: [{ name, price }] } (ORDER_ITEMS in shop.js)
 export function receiptText(o, libraryUrl) {
-  // TODO(human): list every item with its price, and show paid_at as a Thai date
-  return `คำสั่งซื้อ ${o.order_no}\nยอดรวม ${o.total} บาท\n\nดาวน์โหลดสินค้า: ${libraryUrl}`;
+  const baht = (n) => `${Number(n).toLocaleString('th-TH')} บาท`;
+  // the container runs in UTC: say Bangkok, or a 01:00 payment is dated the day before
+  const paid = new Date(o.paid_at).toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Asia/Bangkok' });
+  return [
+    `คำสั่งซื้อ ${o.order_no}`,
+    `ชำระเงินเมื่อ ${paid} น.`,
+    '',
+    ...o.items.map((i) => `- ${i.name}  ${baht(i.price)}`),
+    '',
+    `ยอดรวม ${baht(o.total)}`,
+    '',
+    `ดาวน์โหลดสินค้า: ${libraryUrl}`,
+  ].join('\n');
 }
 
 // ---- CSV (stdlib only; Excel opens it directly) ----
