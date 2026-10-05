@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { HttpError, UPLOAD_DIR } from './lib.js';
+import { q, HttpError, UPLOAD_DIR } from './lib.js';
 import { auth } from './auth.js';
 import { shop, stripeWebhook } from './shop.js';
 import { admin } from './admin.js';
@@ -28,5 +28,11 @@ app.use((err, req, res, next) => {
   const status = err.status || 500;
   res.status(status).json({ error: status === 500 ? 'เกิดข้อผิดพลาดในระบบ' : err.message, ...err.extra });
 });
+
+// db/schema.sql only runs on a fresh Postgres volume, so columns added later are applied here (idempotent).
+// If the DB isn't up yet this throws and compose restarts the container.
+// ponytail: the only migration so far. Move to numbered files + a runner when there's a second one.
+await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz,
+                           ADD COLUMN IF NOT EXISTS mail_sent_at timestamptz`);
 
 app.listen(process.env.PORT || 4000, () => console.log(`api on :${process.env.PORT || 4000}`));

@@ -8,6 +8,8 @@ CREATE TABLE users (
   role          text NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'admin')), -- [14] admins set here only
   failed_logins int NOT NULL DEFAULT 0,
   locked_until  timestamptz,
+  email_verified_at timestamptz, -- NULL = not verified; nothing is blocked, the account page nags
+  mail_sent_at  timestamptz,     -- throttle: one verify / reset mail per minute
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 

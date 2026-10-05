@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { useStore } from '../../../lib/store';
@@ -14,7 +15,7 @@ const rules = {
 export default function Login() {
   const sp = useSearchParams();
   const router = useRouter();
-  const { signIn } = useStore();
+  const { signIn, notify } = useStore();
   const [tab, setTab] = useState(sp.get('tab') === 'register' ? 'register' : 'login');
   const [f, setF] = useState({ name: '', email: '', password: '', confirm: '', remember: false });
   const [touched, setTouched] = useState({});
@@ -37,6 +38,7 @@ export default function Login() {
         ? await api('/auth/register', { method: 'POST', body: { name: f.name, email: f.email, password: f.password } })
         : await api('/auth/login', { method: 'POST', body: { email: f.email, password: f.password, remember: f.remember } });
       await signIn(r.token);
+      if (reg) notify(`ส่งลิงก์ยืนยันอีเมลไปที่ ${r.user.email} แล้ว`);
       const next = sp.get('next');
       router.replace(next?.startsWith('/') && !next.startsWith('//') ? next : '/'); // only same-site redirects
     } catch (e) {
@@ -81,7 +83,10 @@ export default function Login() {
         </div>
         {reg && field('confirm', 'ยืนยันรหัสผ่าน', 'password')}
         {!reg && (
-          <label className="row fld"><input type="checkbox" checked={f.remember} onChange={(e) => setF({ ...f, remember: e.target.checked })} />จำฉันไว้</label>
+          <div className="between fld">
+            <label className="row"><input type="checkbox" checked={f.remember} onChange={(e) => setF({ ...f, remember: e.target.checked })} />จำฉันไว้</label>
+            <Link href="/reset">ลืมรหัสผ่าน?</Link>
+          </div>
         )}
         <button className="btn btnl" disabled={busy || !valid}>{reg ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
       </form>

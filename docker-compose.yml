@@ -7,6 +7,7 @@ services:
     environment:
       DATABASE_URL: postgres://shop:${POSTGRES_PASSWORD}@db:5432/shop
       UPLOAD_DIR: /data
+      PUBLIC_URL: https://digital-product-shop.sukpat.dev # base of the links in verify / reset emails
     volumes:
       - uploads:/data
     depends_on: [db]

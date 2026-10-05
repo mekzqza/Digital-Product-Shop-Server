@@ -41,7 +41,8 @@ async function loadUser(req) {
   const token = bearer(req);
   if (!token) return null;
   const { rows } = await q(
-    `SELECT u.id, u.email, u.name, u.role, u.created_at FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT u.id, u.email, u.name, u.role, u.created_at, u.email_verified_at IS NOT NULL AS email_verified
+     FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > now()`, [sha(token)]);
   return rows[0] || null;
 }
@@ -77,6 +78,13 @@ export function verifyDownload(itemId, exp, sig, now = Date.now()) {
   const good = crypto.createHmac('sha256', secret()).update(`${itemId}.${exp}`).digest('base64url');
   return typeof sig === 'string' && sig.length === good.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good));
 }
+
+// ---- links in emails: the same HMAC, so no token table ----
+// The signed string includes what the link is allowed to change: a reset link dies the moment the password
+// changes (single use) and a verify link dies with the address. u = a users row (id, email, password_hash).
+const linkKey = (kind, u) => `${kind}:${u.id}:${kind === 'reset' ? u.password_hash : u.email}`;
+export const signLink = (kind, u, ttlSec) => ({ u: u.id, ...signDownload(linkKey(kind, u), ttlSec) });
+export const verifyLink = (kind, u, exp, sig) => verifyDownload(linkKey(kind, u), exp, sig);
 
 // ---- mail: Gmail SMTP (GMAIL_APP_PASSWORD is a Google "App Password", not the account password) ----
 const mailer = process.env.GMAIL_USER ? nodemailer.createTransport({
