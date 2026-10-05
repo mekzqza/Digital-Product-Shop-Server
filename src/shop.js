@@ -3,7 +3,7 @@ import { Router } from 'express';
 import Stripe from 'stripe';
 import {
   q, HttpError, CATEGORIES, DOWNLOAD_LIMIT, UPLOAD_DIR, optionalAuth, requireAuth,
-  signDownload, verifyDownload, page,
+  signDownload, verifyDownload, page, sendMail, receiptText,
 } from './lib.js';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_missing');
@@ -132,9 +132,16 @@ export async function stripeWebhook(req, res) {
     const { rows: [o] } = await q(
       `UPDATE orders SET status = 'PAID', paid_at = now(), failure_code = NULL
        WHERE payment_intent = $1 AND status IN ('PENDING', 'FAILED') RETURNING id, user_id`, [pi.id]);
-    if (o) await q(
-      `DELETE FROM cart_items WHERE user_id = $1 AND product_id IN (SELECT product_id FROM order_items WHERE order_id = $2)`,
-      [o.user_id, o.id]);
+    if (o) {
+      await q(
+        `DELETE FROM cart_items WHERE user_id = $1 AND product_id IN (SELECT product_id FROM order_items WHERE order_id = $2)`,
+        [o.user_id, o.id]);
+      const { rows: [r] } = await q(
+        `SELECT u.email, o.order_no, o.total, o.paid_at, ${ORDER_ITEMS}
+         FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1`, [o.id]);
+      // not awaited: Stripe wants its 2xx fast. The UPDATE above matches once, so webhook retries can't resend.
+      sendMail(r.email, `ใบเสร็จรับเงิน ${r.order_no}`, receiptText(r, `${req.protocol}://${req.get('host')}/library`));
+    }
   } else if (ev.type === 'payment_intent.payment_failed') {
     const err = pi.last_payment_error;
     await q(`UPDATE orders SET status = 'FAILED', failure_code = $2 WHERE payment_intent = $1 AND status = 'PENDING'`,

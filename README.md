@@ -38,6 +38,8 @@ curl http://localhost/api/health   # ผ่าน nginx → {"ok":true}
 | `STRIPE_SECRET_KEY` | `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` จากหน้า webhook ของ Stripe |
 | `NEXT_PUBLIC_STRIPE_PK` | `pk_test_…` — ฝังตอน build หน้าเว็บ เปลี่ยนแล้วต้อง `docker compose build web` |
+| `GMAIL_USER` | Gmail ที่ใช้ส่งใบเสร็จหลังชำระเงินสำเร็จ (เว้นว่าง = ไม่ส่งเมล) |
+| `GMAIL_APP_PASSWORD` | App Password 16 ตัวจาก <https://myaccount.google.com/apppasswords> — ต้องเปิด 2-Step Verification ก่อน ไม่ใช่รหัสผ่านบัญชี |
 
 ### nginx
 

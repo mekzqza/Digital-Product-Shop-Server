@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
+import nodemailer from 'nodemailer';
 import pg from 'pg';
 
 pg.types.setTypeParser(1700, Number); // numeric → JS number (prices fit easily)
@@ -75,6 +76,23 @@ export function verifyDownload(itemId, exp, sig, now = Date.now()) {
   if (!(Number(exp) > now / 1000)) return false;
   const good = crypto.createHmac('sha256', secret()).update(`${itemId}.${exp}`).digest('base64url');
   return typeof sig === 'string' && sig.length === good.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good));
+}
+
+// ---- mail: Gmail SMTP (GMAIL_APP_PASSWORD is a Google "App Password", not the account password) ----
+const mailer = process.env.GMAIL_USER ? nodemailer.createTransport({
+  service: 'gmail', auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+}) : null;
+// Never rejects: callers don't await it, and a mail failure must not undo a paid order. No GMAIL_USER = no-op.
+// ponytail: one try, failures only logged, Gmail caps ~500 mails/day. Add orders.receipt_sent_at + a resend
+// endpoint (or a real mail provider) when a lost receipt starts to matter.
+export const sendMail = (to, subject, text) => mailer
+  ?.sendMail({ from: `Digital Product Shop <${process.env.GMAIL_USER}>`, to, subject, text })
+  .catch((e) => console.error('mail failed:', e.message));
+
+// Plain-text receipt body. o = { order_no, total, paid_at: Date, items: [{ name, price }] } (ORDER_ITEMS in shop.js)
+export function receiptText(o, libraryUrl) {
+  // TODO(human): list every item with its price, and show paid_at as a Thai date
+  return `คำสั่งซื้อ ${o.order_no}\nยอดรวม ${o.total} บาท\n\nดาวน์โหลดสินค้า: ${libraryUrl}`;
 }
 
 // ---- CSV (stdlib only; Excel opens it directly) ----
